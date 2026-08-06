@@ -1,8 +1,10 @@
+import type { DueItem } from '../lib/recurring'
 import type { TxType } from '../types'
 import {
   DEFAULT_SETTINGS,
   db,
   type Category,
+  type RecurringRule,
   type Settings,
   type Transaction,
 } from './schema'
@@ -143,6 +145,109 @@ export async function listAllCategories(): Promise<Category[]> {
   return rows.sort((a, b) => {
     if (a.type !== b.type) return a.type === 'expense' ? -1 : 1
     return a.sortOrder - b.sortOrder
+  })
+}
+
+/** 新增規則時由呼叫端提供的欄位，其餘由這一層補上。 */
+export type RecurringDraft = Omit<RecurringRule, 'id' | 'lastGeneratedMonth'>
+
+/**
+ * 列出所有定期規則，含已停用的。
+ *
+ * active 是布林欄位所以沒有索引（IndexedDB 不接受布林鍵），
+ * 要篩選在 JS 端做即可，這張表只有個位數筆。
+ */
+export async function listRecurringRules(): Promise<RecurringRule[]> {
+  return db.recurringRules.toArray()
+}
+
+/** 新增一條規則。lastGeneratedMonth 起始為空字串，代表還沒產生過任何一筆。 */
+export async function addRecurringRule(
+  draft: RecurringDraft,
+): Promise<RecurringRule> {
+  const rule: RecurringRule = {
+    ...draft,
+    id: crypto.randomUUID(),
+    lastGeneratedMonth: '',
+  }
+  await db.recurringRules.add(rule)
+  return rule
+}
+
+export async function updateRecurringRule(
+  id: string,
+  patch: Partial<RecurringDraft>,
+): Promise<void> {
+  await db.recurringRules.update(id, patch)
+}
+
+/**
+ * 刪除規則。
+ *
+ * 刻意不連帶刪除它產生過的交易：那些是真實發生過的帳，
+ * 規則只是產生它們的模板，模板沒了不代表房租沒繳過。
+ */
+export async function deleteRecurringRule(id: string): Promise<void> {
+  await db.recurringRules.delete(id)
+}
+
+/**
+ * 確認一筆待確認的定期帳：寫入交易並推進鎖。
+ *
+ * **這兩件事必須在同一個交易裡完成。** 分兩步做的話，中間當掉會留下
+ * 「交易已寫入但鎖沒推進」的狀態，下次開 App 又跳出同一筆，變成重複記帳 ——
+ * 那正是 lastGeneratedMonth 這個鎖要防的事，分兩步等於自己把鎖拆了。
+ *
+ * amountMinor 獨立傳入而不直接用 item 裡的值，因為水電費這類帳每個月的
+ * 數字都不一樣，確認時要能當場改。
+ */
+export async function confirmDueItem(
+  item: DueItem,
+  amountMinor: number,
+): Promise<void> {
+  const now = nextTimestamp()
+  const tx: Transaction = {
+    id: crypto.randomUUID(),
+    type: item.type,
+    amountMinor,
+    date: item.date,
+    categoryId: item.categoryId,
+    note: item.note,
+    // 記下來源，日後才分得出哪些帳是自動產生的。
+    recurringId: item.ruleId,
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  await db.transaction(
+    'rw',
+    db.transactions,
+    db.settings,
+    db.recurringRules,
+    async () => {
+      await db.transactions.add(tx)
+
+      const settings = (await db.settings.get('app')) ?? DEFAULT_SETTINGS
+      await db.settings.put({
+        ...settings,
+        txCountSinceBackup: settings.txCountSinceBackup + 1,
+      })
+
+      await db.recurringRules.update(item.ruleId, {
+        lastGeneratedMonth: item.month,
+      })
+    },
+  )
+}
+
+/**
+ * 跳過一筆待確認的定期帳：只推進鎖，不寫交易。
+ *
+ * 跳過也必須推進鎖，否則下次開 App 又會跳出來，「跳過」就等於沒有作用。
+ */
+export async function skipDueItem(item: DueItem): Promise<void> {
+  await db.recurringRules.update(item.ruleId, {
+    lastGeneratedMonth: item.month,
   })
 }
 

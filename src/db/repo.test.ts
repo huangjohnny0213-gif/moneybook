@@ -1,10 +1,17 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { expandDueRules } from '../lib/recurring'
 import { db, type Category } from './schema'
 import {
+  addRecurringRule,
   addTransaction,
+  confirmDueItem,
+  deleteRecurringRule,
   deleteTransaction,
   getSettings,
+  listRecurringRules,
+  skipDueItem,
+  updateRecurringRule,
   listAllCategories,
   listCategories,
   listRecentTransactions,
@@ -298,5 +305,134 @@ describe('updateCategoryStyle', () => {
     expect(stored?.name).toBe('飲食')
     expect(stored?.type).toBe('expense')
     expect(stored?.sortOrder).toBe(1)
+  })
+})
+
+const ruleDraft = {
+  type: 'expense' as const,
+  amountMinor: 1800000,
+  categoryId: 'fixed',
+  note: '房租',
+  dayOfMonth: 31,
+  startDate: '2026-01-01',
+  active: true,
+}
+
+describe('定期規則的增刪改查', () => {
+  test('新增時產生 id，鎖為空代表還沒開始', () => {
+    return addRecurringRule(ruleDraft).then((created) => {
+      expect(created.id).toBeTruthy()
+      expect(created.lastGeneratedMonth).toBe('')
+    })
+  })
+
+  test('列出全部，含已停用的', async () => {
+    await addRecurringRule(ruleDraft)
+    await addRecurringRule({ ...ruleDraft, note: '電信費', active: false })
+    expect(await listRecurringRules()).toHaveLength(2)
+  })
+
+  test('修改欄位', async () => {
+    const created = await addRecurringRule(ruleDraft)
+    await updateRecurringRule(created.id, { amountMinor: 1900000, active: false })
+
+    const stored = await db.recurringRules.get(created.id)
+    expect(stored?.amountMinor).toBe(1900000)
+    expect(stored?.active).toBe(false)
+  })
+
+  test('刪除規則不會動到已經產生的交易', async () => {
+    // 那些是真實發生過的帳，規則只是產生它們的模板。
+    const created = await addRecurringRule(ruleDraft)
+    await confirmDueItem(
+      {
+        ruleId: created.id,
+        month: '2026-01',
+        date: '2026-01-31',
+        type: 'expense',
+        amountMinor: 1800000,
+        categoryId: 'fixed',
+        note: '房租',
+      },
+      1800000,
+    )
+
+    await deleteRecurringRule(created.id)
+
+    expect(await db.recurringRules.get(created.id)).toBeUndefined()
+    expect(await db.transactions.count()).toBe(1)
+  })
+})
+
+describe('confirmDueItem', () => {
+  async function setup() {
+    const created = await addRecurringRule(ruleDraft)
+    const [due] = expandDueRules([created], '2026-01-31')
+    return { created, due }
+  }
+
+  test('寫入交易並帶上 recurringId', async () => {
+    const { created, due } = await setup()
+    await confirmDueItem(due, due.amountMinor)
+
+    const [stored] = await db.transactions.toArray()
+    expect(stored).toMatchObject({
+      date: '2026-01-31',
+      categoryId: 'fixed',
+      note: '房租',
+      recurringId: created.id,
+    })
+  })
+
+  test('同時推進鎖，讓下次展開不再出現同一筆', async () => {
+    // 這兩件事必須一起發生。只寫交易沒推鎖的話下次開 App 又跳出來，
+    // 就變成重複記帳 —— 那正是 lastGeneratedMonth 要防的事。
+    const { created, due } = await setup()
+    await confirmDueItem(due, due.amountMinor)
+
+    const updated = await db.recurringRules.get(created.id)
+    expect(updated?.lastGeneratedMonth).toBe('2026-01')
+    expect(expandDueRules([updated!], '2026-01-31')).toEqual([])
+  })
+
+  test('可以當場改金額', async () => {
+    // 水電費每個月的數字都不一樣。
+    const { due } = await setup()
+    await confirmDueItem(due, 2100000)
+
+    const [stored] = await db.transactions.toArray()
+    expect(stored.amountMinor).toBe(2100000)
+  })
+
+  test('算進未備份筆數', async () => {
+    const { due } = await setup()
+    await confirmDueItem(due, due.amountMinor)
+    expect((await getSettings()).txCountSinceBackup).toBe(1)
+  })
+
+  test('確認三筆之後交易剛好三筆，且不再有待確認', async () => {
+    const created = await addRecurringRule(ruleDraft)
+    for (const due of expandDueRules([created], '2026-03-31')) {
+      await confirmDueItem(due, due.amountMinor)
+    }
+
+    expect(await db.transactions.count()).toBe(3)
+    const updated = await db.recurringRules.get(created.id)
+    expect(expandDueRules([updated!], '2026-03-31')).toEqual([])
+  })
+})
+
+describe('skipDueItem', () => {
+  test('不寫交易但仍推進鎖', async () => {
+    // 不推鎖的話下次開 App 又會跳出來，「跳過」就等於沒有作用。
+    const created = await addRecurringRule(ruleDraft)
+    const [due] = expandDueRules([created], '2026-01-31')
+
+    await skipDueItem(due)
+
+    expect(await db.transactions.count()).toBe(0)
+    const updated = await db.recurringRules.get(created.id)
+    expect(updated?.lastGeneratedMonth).toBe('2026-01')
+    expect(expandDueRules([updated!], '2026-01-31')).toEqual([])
   })
 })
