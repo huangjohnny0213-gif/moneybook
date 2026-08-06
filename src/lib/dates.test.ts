@@ -6,6 +6,7 @@ import {
   formatDayLabel,
   formatMonthLabel,
   monthKey,
+  recentMonths,
   toISODate,
 } from './dates'
 
@@ -82,6 +83,36 @@ describe('addMonths', () => {
 
   test('加零不變', () => {
     expect(addMonths('2026-08', 0)).toBe('2026-08')
+  })
+})
+
+describe('recentMonths', () => {
+  test('由舊到新，含結尾那個月', () => {
+    expect(recentMonths('2026-08', 6)).toEqual([
+      '2026-03',
+      '2026-04',
+      '2026-05',
+      '2026-06',
+      '2026-07',
+      '2026-08',
+    ])
+  })
+
+  test('跨年', () => {
+    expect(recentMonths('2026-02', 4)).toEqual([
+      '2025-11',
+      '2025-12',
+      '2026-01',
+      '2026-02',
+    ])
+  })
+
+  test('取一個月就是它自己', () => {
+    expect(recentMonths('2026-08', 1)).toEqual(['2026-08'])
+  })
+
+  test('取零個月是空陣列', () => {
+    expect(recentMonths('2026-08', 0)).toEqual([])
   })
 })
 

@@ -8,6 +8,7 @@ import {
   listAllCategories,
   listCategories,
   listRecentTransactions,
+  listTransactionsBetween,
   listTransactionsByMonth,
   updateCategoryStyle,
   updateTransaction,
@@ -177,6 +178,31 @@ describe('listRecentTransactions', () => {
 
     const result = await listRecentTransactions(2)
     expect(result.map((t) => t.date)).toEqual(['2026-08-06', '2026-08-02'])
+  })
+})
+
+describe('listTransactionsBetween', () => {
+  test('含頭尾兩天', async () => {
+    await addTransaction({ ...draft, date: '2026-06-30' })
+    await addTransaction({ ...draft, date: '2026-07-01' })
+    await addTransaction({ ...draft, date: '2026-08-31' })
+    await addTransaction({ ...draft, date: '2026-09-01' })
+
+    const result = await listTransactionsBetween('2026-07-01', '2026-08-31')
+    expect(result.map((t) => t.date)).toEqual(['2026-08-31', '2026-07-01'])
+  })
+
+  test('跨年的區間', async () => {
+    await addTransaction({ ...draft, date: '2025-12-15' })
+    await addTransaction({ ...draft, date: '2026-01-15' })
+
+    expect(
+      await listTransactionsBetween('2025-12-01', '2026-01-31'),
+    ).toHaveLength(2)
+  })
+
+  test('區間內沒有帳時回傳空陣列', async () => {
+    expect(await listTransactionsBetween('2020-01-01', '2020-12-31')).toEqual([])
   })
 })
 

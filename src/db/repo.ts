@@ -100,6 +100,22 @@ export async function listTransactionsByMonth(
   return rows.sort(byNewestFirst)
 }
 
+/**
+ * 取一段日期區間內的所有帳，含頭尾。近六月趨勢用。
+ *
+ * 日期是等寬字串所以可以直接做字典序比較，走 date 索引不必全表掃描。
+ */
+export async function listTransactionsBetween(
+  startDate: string,
+  endDate: string,
+): Promise<Transaction[]> {
+  const rows = await db.transactions
+    .where('date')
+    .between(startDate, endDate, true, true)
+    .toArray()
+  return rows.sort(byNewestFirst)
+}
+
 /** 取最近幾筆，不限月份。 */
 export async function listRecentTransactions(
   limit: number,

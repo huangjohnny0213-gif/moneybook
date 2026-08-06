@@ -48,6 +48,13 @@ export function addMonths(key: string, delta: number): string {
   return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, '0')}`
 }
 
+/** 從某個月往回數 count 個月，由舊到新，含結尾那個月。用於近六月趨勢。 */
+export function recentMonths(endMonth: string, count: number): string[] {
+  return Array.from({ length: count }, (_, index) =>
+    addMonths(endMonth, index - count + 1),
+  )
+}
+
 /** 'YYYY-MM' → '2026年8月'。 */
 export function formatMonthLabel(key: string): string {
   const [year, month] = key.split('-').map(Number)
