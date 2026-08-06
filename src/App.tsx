@@ -1,122 +1,59 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useState } from 'react'
+import { AddEntry } from './screens/AddEntry'
+import { CategoryStyle } from './screens/CategoryStyle'
+import { Transactions } from './screens/Transactions'
+import { seedCategoriesIfEmpty } from './db/seed'
 
-function App() {
-  const [count, setCount] = useState(0)
+const TABS = [
+  { id: 'add', label: '記帳', Screen: AddEntry },
+  { id: 'list', label: '明細', Screen: Transactions },
+  { id: 'settings', label: '分類', Screen: CategoryStyle },
+] as const
+
+type TabId = (typeof TABS)[number]['id']
+
+/**
+ * App 外框。
+ *
+ * 沒有引入路由套件：裝成主畫面後是全螢幕、看不到網址列，也不需要深連結，
+ * 一個 state 就夠了。
+ */
+export default function App() {
+  const [tab, setTab] = useState<TabId>('add')
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    // 每次開 App 都呼叫，但只在資料庫還沒有分類時才真的寫入。
+    seedCategoriesIfEmpty().then(() => setReady(true))
+  }, [])
+
+  const Screen = TABS.find((item) => item.id === tab)!.Screen
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    // pt 補的是瀏海／狀態列。裝成主畫面後畫面會延伸到它底下，
+    // 不補的話最上面一排控制項會被時間與訊號格蓋住。
+    <div className="mx-auto flex h-[100svh] max-w-[430px] flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
+      <main className="min-h-0 flex-1">{ready && <Screen />}</main>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      <nav
+        // env(safe-area-inset-bottom) 把 home indicator 的高度補回來，
+        // 沒有它最底下那排按鈕會被那條橫槓蓋住。
+        className="flex border-t border-hairline bg-raised pb-[env(safe-area-inset-bottom)]"
+      >
+        {TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setTab(item.id)}
+            aria-current={tab === item.id ? 'page' : undefined}
+            className={`flex-1 py-3 text-sm ${
+              tab === item.id ? 'font-semibold text-ink' : 'text-ink-3'
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
+    </div>
   )
 }
-
-export default App
