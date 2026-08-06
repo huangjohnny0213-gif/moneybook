@@ -11,9 +11,33 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fcfcfb" />
     <title>記帳本</title>
+    <!--
+      在首次繪製前就決定主題。放在 <head> 而非交給 React，是因為 React 掛載完
+      至少已經過了一幀，每次開 App 都會先閃一下淺色再轉深色。
+      讀的是 localStorage 而非 IndexedDB，因為只有前者是同步的。
+    -->
+    <script>
+      (function () {
+        var pref = 'system'
+        try {
+          pref = localStorage.getItem('moneybook.theme') || 'system'
+        } catch (e) {
+          // Safari 無痕模式讀 localStorage 會丟例外，當作沒設定過。
+        }
+        var dark =
+          pref === 'dark' ||
+          (pref !== 'light' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        if (dark) {
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute('content', '#121211')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

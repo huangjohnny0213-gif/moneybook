@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { useTheme } from '../components/themeContext'
 import { swapCategoryColor } from '../lib/categoryColors'
 import { categoryGlyph, firstGrapheme } from '../lib/glyph'
 import { CATEGORICAL_LIGHT } from '../lib/palette'
@@ -13,6 +14,7 @@ import type { Category } from '../db/schema'
  */
 export function CategoryStyle() {
   const categories = useLiveQuery(listAllCategories, [], [] as Category[])
+  const { seriesColor } = useTheme()
 
   async function pickColor(target: Category, color: string) {
     // 八色八類，換色幾乎必然撞色。撞到就兩邊對調，維持每類一色。
@@ -23,17 +25,17 @@ export function CategoryStyle() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <p className="px-4 pt-4 pb-3 text-xs leading-relaxed text-ink-3">
+    <div>
+      <p className="px-4 pt-3 pb-1 text-xs leading-relaxed text-ink-3">
         還沒設 emoji 的分類會顯示名稱首字。顏色只能在這八色之間對調，
         它們經過色盲檢測，換過去圖表仍然分得出來。
       </p>
 
       {['expense', 'income'].map((type) => (
         <section key={type}>
-          <h2 className="bg-key px-4 py-1.5 text-xs font-medium text-ink-2">
+          <h3 className="px-4 pt-3 pb-1 text-xs text-ink-3">
             {type === 'expense' ? '支出' : '收入'}
-          </h2>
+          </h3>
           {categories
             .filter((category) => category.type === type)
             .map((category) => (
@@ -44,7 +46,7 @@ export function CategoryStyle() {
                 <div className="flex items-center gap-3">
                   <span
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-base text-white"
-                    style={{ background: category.color }}
+                    style={{ background: seriesColor(category.color) }}
                   >
                     {categoryGlyph(category)}
                   </span>
@@ -73,7 +75,7 @@ export function CategoryStyle() {
                       aria-pressed={category.color === color}
                       className="h-7 w-7 rounded-full"
                       style={{
-                        background: color,
+                        background: seriesColor(color),
                         // 選中的色票用外環標示，不靠亮度差 ——
                         // 八個色階本來就刻意亮度相近，靠亮度看不出來。
                         boxShadow:

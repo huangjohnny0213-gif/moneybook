@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { useTheme } from '../components/themeContext'
 import {
   addMonths,
   formatDayLabel,
@@ -29,6 +30,7 @@ export function Transactions() {
   )
   const categories = useLiveQuery(listAllCategories, [], [] as Category[])
   const byId = new Map(categories.map((c) => [c.id, c]))
+  const { seriesColor } = useTheme()
 
   const expense = sumOf(rows, 'expense')
   const income = sumOf(rows, 'income')
@@ -70,6 +72,7 @@ export function Transactions() {
                   row={row}
                   category={byId.get(row.categoryId)}
                   onSelect={() => setEditing(row)}
+                  seriesColor={seriesColor}
                 />
               ))}
             </section>
@@ -150,10 +153,12 @@ function Row({
   row,
   category,
   onSelect,
+  seriesColor,
 }: {
   row: Transaction
   category: Category | undefined
   onSelect: () => void
+  seriesColor: (hex: string) => string
 }) {
   return (
     <button
@@ -163,7 +168,9 @@ function Row({
     >
       <span
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm text-white"
-        style={{ background: category?.color ?? 'var(--ink-3)' }}
+        style={{
+          background: category ? seriesColor(category.color) : 'var(--ink-3)',
+        }}
       >
         {category ? categoryGlyph(category) : '?'}
       </span>
@@ -203,6 +210,7 @@ function EditSheet({
   const [date, setDate] = useState(transaction.date)
   const [note, setNote] = useState(transaction.note)
   const [categoryId, setCategoryId] = useState(transaction.categoryId)
+  const { seriesColor } = useTheme()
 
   const amountMinor = toMinor(amount)
 
@@ -270,7 +278,7 @@ function EditSheet({
               className="rounded-full px-3 py-1.5 text-sm"
               style={
                 category.id === categoryId
-                  ? { background: category.color, color: '#fff' }
+                  ? { background: seriesColor(category.color), color: '#fff' }
                   : { background: 'var(--key)', color: 'var(--ink-2)' }
               }
             >

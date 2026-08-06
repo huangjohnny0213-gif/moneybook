@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { NumericKeypad } from '../components/NumericKeypad'
+import { useTheme } from '../components/themeContext'
 import { EMPTY_AMOUNT, pressKey, type AmountKey } from '../lib/amountInput'
 import { todayISO } from '../lib/dates'
 import { categoryGlyph } from '../lib/glyph'
@@ -23,6 +24,7 @@ export function AddEntry() {
   const [saved, setSaved] = useState(false)
 
   const categories = useLiveQuery(() => listCategories(type), [type], [])
+  const { seriesColor } = useTheme()
 
   const amountMinor = toMinor(amount)
   const canSubmit = amountMinor > 0 && categoryId !== null
@@ -69,6 +71,7 @@ export function AddEntry() {
         <div className="grid grid-cols-4 gap-2 px-4 pb-4">
           {categories.map((category) => {
             const selected = category.id === categoryId
+            const color = seriesColor(category.color)
             return (
               <button
                 key={category.id}
@@ -81,11 +84,11 @@ export function AddEntry() {
                   className="flex h-12 w-12 items-center justify-center rounded-full text-lg transition-[background-color,color]"
                   style={
                     selected
-                      ? { background: category.color, color: '#fff' }
+                      ? { background: color, color: '#fff' }
                       : {
                           background: 'var(--key)',
-                          color: category.color,
-                          boxShadow: `inset 0 0 0 1.5px ${category.color}`,
+                          color,
+                          boxShadow: `inset 0 0 0 1.5px ${color}`,
                         }
                   }
                 >

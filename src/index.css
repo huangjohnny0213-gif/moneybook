@@ -9,6 +9,12 @@
  * 不引入網頁字型：這是離線優先的 PWA，webfont 是快取負擔，首次啟動還會閃一次
  * 無字狀態。個性交給字級對比與字距，不靠買字型。
  */
+/*
+ * 主題只有 light 與 dark 兩種狀態，由 index.html 的行內腳本把「解析後」的結果
+ * 寫進 <html data-theme>。深色值刻意不再寫一份到 prefers-color-scheme 的
+ * media query 裡：那會變成兩份要同步維護的深色變數，而且手動選的偏好還得用
+ * :not() 去壓過 media query。單一來源比較不會有一邊改了另一邊忘記的問題。
+ */
 :root {
   --surface: #fcfcfb;
   --raised: #ffffff;
@@ -18,19 +24,22 @@
   --hairline: #e1e0d9;
   --key: #ffffff;
   --key-press: #eceae4;
+
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #121211;
-    --raised: #1a1a19;
-    --ink: #ffffff;
-    --ink-2: #c3c2b7;
-    --ink-3: #898781;
-    --hairline: #2c2c2a;
-    --key: #232321;
-    --key-press: #333330;
-  }
+:root[data-theme='dark'] {
+  --surface: #121211;
+  --raised: #1a1a19;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-3: #898781;
+  --hairline: #2c2c2a;
+  --key: #232321;
+  --key-press: #333330;
+
+  /* 讓日期選擇器這類系統元件跟著轉深色，否則會在深色頁面上開出一片白。 */
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -49,7 +58,6 @@
 html {
   /* 消掉 iOS 的橡皮筋回彈，裝成主畫面後才不會像網頁。 */
   overscroll-behavior: none;
-  color-scheme: light dark;
 }
 
 body {
