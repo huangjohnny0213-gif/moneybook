@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!--
+      iOS 不完全吃 manifest 裡的 icons，加入主畫面時看的是這個標籤。
+      少了它會拿網頁截圖當 icon，主畫面上會出現一張看不懂的縮圖。
+    -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!--
       viewport-fit=cover 讓畫面延伸到瀏海與 home indicator 底下，
       安全區再由 CSS 的 env(safe-area-inset-*) 補回來。沒有它底部按鈕會被蓋住。
     -->

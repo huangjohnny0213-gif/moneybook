@@ -4,7 +4,9 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    "types": ["vite/client"],
+    // vite-plugin-pwa/react 是 virtual:pwa-register/react 這個虛擬模組的型別，
+    // 不加它 tsc -b 會直接說找不到模組（vitest 不做型別檢查，抓不到）。
+    "types": ["vite/client", "vite-plugin-pwa/react"],
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 

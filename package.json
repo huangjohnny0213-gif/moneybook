@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "icons": "node scripts/make-icons.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
@@ -15,7 +16,8 @@
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "workbox-window": "^7.4.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ThemeProvider } from './components/ThemeProvider'
 import { useDueItems } from './components/useDueItems'
+import { UpdatePrompt } from './components/UpdatePrompt'
 import { AddEntry } from './screens/AddEntry'
 import { Settings } from './screens/Settings'
 import { Transactions } from './screens/Transactions'
@@ -58,6 +59,9 @@ function Shell() {
           )}
           {ready && tab === 'settings' && <Settings />}
         </main>
+
+        {/* 放在 tab bar 之上而不是畫面頂端：更新不急，不該把當下在看的資料擠掉。 */}
+        <UpdatePrompt />
 
         <nav
           // env(safe-area-inset-bottom) 把 home indicator 的高度補回來，
