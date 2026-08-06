@@ -1,5 +1,11 @@
+import { useLiveQuery } from 'dexie-react-hooks'
+import { DueList } from '../components/DueList'
+import { RecurringRules } from '../components/RecurringRules'
+import { useDueItems } from '../components/useDueItems'
 import { useTheme } from '../components/themeContext'
 import type { ThemePref } from '../lib/theme'
+import { listAllCategories } from '../db/repo'
+import type { Category } from '../db/schema'
 import { CategoryStyle } from './CategoryStyle'
 
 const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
@@ -8,12 +14,24 @@ const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
   { value: 'dark', label: '深色' },
 ]
 
-/** 設定頁。目前只有外觀與分類，之後的定期支出規則與備份匯出也會放進來。 */
+/**
+ * 設定頁。
+ *
+ * 區塊順序是刻意的：待確認排在最上面，那是唯一需要使用者採取行動的東西，
+ * 其餘都是設好就不太會再動的偏好。
+ */
 export function Settings() {
   const { pref, setPref } = useTheme()
+  const dueItems = useDueItems()
+  const categories = useLiveQuery(listAllCategories, [], [] as Category[])
+  const byId = new Map(categories.map((c) => [c.id, c]))
 
   return (
     <div className="h-full overflow-y-auto">
+      <DueList items={dueItems} categories={byId} />
+
+      <RecurringRules />
+
       <section>
         <h2 className="bg-key px-4 py-1.5 text-xs font-medium text-ink-2">
           外觀
