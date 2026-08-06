@@ -53,3 +53,8 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # 預設等 10 分鐘。這個站第一次部署時後端的狀態一直卡在 deployment_queued，
+          # 檔案其實早就上線了，只是狀態沒回報，結果每次都白等十分鐘才報紅字。
+          # 縮到三分鐘：正常情況幾秒就好，卡住時也不會佔著跑者不放。
+          timeout: 180000
