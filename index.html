@@ -17,6 +17,17 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta name="theme-color" content="#fcfcfb" />
+    <!--
+      舊版 iOS 不看 manifest 的 display，靠這個標籤才會全螢幕開啟（沒有網址列）。
+      新版 iOS 已經吃 manifest 了，但留著它不會有副作用。
+    -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!--
+      主畫面上的名稱。沒有它 iOS 會拿 <title> 的「記帳本」，
+      四個字在 icon 底下會被截斷成「記帳...」。
+    -->
+    <meta name="apple-mobile-web-app-title" content="記帳" />
     <title>記帳本</title>
     <!--
       在首次繪製前就決定主題。放在 <head> 而非交給 React，是因為 React 掛載完
