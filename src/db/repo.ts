@@ -1,6 +1,8 @@
+import type { TxType } from '../types'
 import {
   DEFAULT_SETTINGS,
   db,
+  type Category,
   type Settings,
   type Transaction,
 } from './schema'
@@ -104,4 +106,39 @@ export async function listRecentTransactions(
 ): Promise<Transaction[]> {
   const rows = await db.transactions.orderBy('date').reverse().toArray()
   return rows.sort(byNewestFirst).slice(0, limit)
+}
+
+/**
+ * 取某類型可用的分類，已封存的不回傳，依 sortOrder 排序。
+ *
+ * archived 刻意沒有索引（見 schema.ts），所以在 JS 端過濾。
+ * 分類只有個位數筆，全部撈出來再篩不會有效能問題。
+ */
+export async function listCategories(type: TxType): Promise<Category[]> {
+  const rows = await db.categories.where('type').equals(type).toArray()
+  return rows
+    .filter((c) => !c.archived)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+}
+
+/** 取全部分類（含已封存），支出在前收入在後，各自依 sortOrder。分類設定畫面用。 */
+export async function listAllCategories(): Promise<Category[]> {
+  const rows = await db.categories.toArray()
+  return rows.sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'expense' ? -1 : 1
+    return a.sortOrder - b.sortOrder
+  })
+}
+
+/**
+ * 只改分類的顯示樣式。
+ *
+ * 刻意不開放改 name 與 type：歷史交易只存 categoryId，改名稱會讓舊帳的意義
+ * 悄悄變掉（把「飲食」改成「房租」，過去半年的午餐就全變成房租了）。
+ */
+export async function updateCategoryStyle(
+  id: string,
+  style: { emoji?: string; color?: string },
+): Promise<void> {
+  await db.categories.update(id, style)
 }

@@ -1,12 +1,15 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { db } from './schema'
+import { db, type Category } from './schema'
 import {
   addTransaction,
   deleteTransaction,
   getSettings,
+  listAllCategories,
+  listCategories,
   listRecentTransactions,
   listTransactionsByMonth,
+  updateCategoryStyle,
   updateTransaction,
 } from './repo'
 
@@ -174,5 +177,100 @@ describe('listRecentTransactions', () => {
 
     const result = await listRecentTransactions(2)
     expect(result.map((t) => t.date)).toEqual(['2026-08-06', '2026-08-02'])
+  })
+})
+
+/** 建一筆分類，只指定關心的欄位，其餘給合理預設。 */
+function category(patch: Partial<Category> & Pick<Category, 'id'>): Category {
+  return {
+    name: patch.id,
+    type: 'expense',
+    emoji: '',
+    color: '#2a78d6',
+    sortOrder: 1,
+    archived: false,
+    ...patch,
+  }
+}
+
+describe('listCategories', () => {
+  beforeEach(async () => {
+    await db.categories.bulkAdd([
+      category({ id: 'c', sortOrder: 3 }),
+      category({ id: 'a', sortOrder: 1 }),
+      category({ id: 'b', sortOrder: 2 }),
+      category({ id: 'gone', sortOrder: 4, archived: true }),
+      category({ id: 'salary', type: 'income', sortOrder: 1 }),
+    ])
+  })
+
+  test('依 sortOrder 排序', async () => {
+    const result = await listCategories('expense')
+    expect(result.map((c) => c.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  test('只回傳指定類型', async () => {
+    expect((await listCategories('income')).map((c) => c.id)).toEqual(['salary'])
+  })
+
+  test('不回傳已封存的分類', async () => {
+    // 封存的分類不該出現在記帳畫面，但舊帳仍要能顯示它的名稱與顏色。
+    const ids = (await listCategories('expense')).map((c) => c.id)
+    expect(ids).not.toContain('gone')
+  })
+})
+
+describe('listAllCategories', () => {
+  test('含已封存的，支出在前收入在後，各自依 sortOrder', async () => {
+    await db.categories.bulkAdd([
+      category({ id: 'salary', type: 'income', sortOrder: 1 }),
+      category({ id: 'b', sortOrder: 2 }),
+      category({ id: 'gone', sortOrder: 3, archived: true }),
+      category({ id: 'a', sortOrder: 1 }),
+    ])
+
+    const result = await listAllCategories()
+    expect(result.map((c) => c.id)).toEqual(['a', 'b', 'gone', 'salary'])
+  })
+
+  test('沒有分類時回傳空陣列', async () => {
+    expect(await listAllCategories()).toEqual([])
+  })
+})
+
+describe('updateCategoryStyle', () => {
+  beforeEach(async () => {
+    await db.categories.add(
+      category({ id: 'food', name: '飲食', emoji: '', color: '#2a78d6' }),
+    )
+  })
+
+  test('改 emoji', async () => {
+    await updateCategoryStyle('food', { emoji: '🍜' })
+    expect((await db.categories.get('food'))?.emoji).toBe('🍜')
+  })
+
+  test('改顏色', async () => {
+    await updateCategoryStyle('food', { color: '#e34948' })
+    expect((await db.categories.get('food'))?.color).toBe('#e34948')
+  })
+
+  test('只給一個欄位時另一個不動', async () => {
+    await updateCategoryStyle('food', { emoji: '🍜' })
+    await updateCategoryStyle('food', { color: '#e34948' })
+
+    const stored = await db.categories.get('food')
+    expect(stored?.emoji).toBe('🍜')
+    expect(stored?.color).toBe('#e34948')
+  })
+
+  test('不會動到名稱、類型與排序', async () => {
+    // 分類管理只開放改樣式，名稱與 id 改了會讓歷史交易對不上。
+    await updateCategoryStyle('food', { emoji: '🍜', color: '#e34948' })
+
+    const stored = await db.categories.get('food')
+    expect(stored?.name).toBe('飲食')
+    expect(stored?.type).toBe('expense')
+    expect(stored?.sortOrder).toBe(1)
   })
 })
