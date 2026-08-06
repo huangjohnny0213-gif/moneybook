@@ -6,10 +6,9 @@ on:
   # 手動觸發：改了 Pages 設定想重跑一次時不必製造一顆空 commit。
   workflow_dispatch:
 
+# 只需要推 gh-pages 分支的權限。
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 # 這個 App 沒有 staging，push 就是上線。兩次 push 疊在一起時只留最後一次，
 # 免得舊的部署後完成、把新版蓋回去。
@@ -18,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,21 +39,22 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
-        with:
-          # 預設等 10 分鐘。這個站第一次部署時後端的狀態一直卡在 deployment_queued，
-          # 檔案其實早就上線了，只是狀態沒回報，結果每次都白等十分鐘才報紅字。
-          # 縮到三分鐘：正常情況幾秒就好，卡住時也不會佔著跑者不放。
-          timeout: 180000
+      # 直接把 dist 推成 gh-pages 分支，而不是用 actions/deploy-pages。
+      #
+      # 原因：這個 repo 用 Actions 的部署方式時，deployment 建得出來卻永遠卡在
+      # deployment_queued，只有最初那一次真的上線，後面每一次推的內容都沒生效 ——
+      # 而且動作本身只會逾時報錯，不會告訴你「檔案沒換」。分支式部署走的是
+      # 另一條老管線，狀態直接看分支上的 commit 就好，不必信任那個佇列。
+      #
+      # 沒用第三方 action：這是公開 repo，少一個外部相依就少一個要盯的東西。
+      - name: 推上 gh-pages
+        run: |
+          cd dist
+          # 沒有這個檔案 Jekyll 會處理一遍靜態檔，底線開頭的檔案會被吃掉。
+          touch .nojekyll
+          git init -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "部署 ${{ github.sha }}"
+          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
