@@ -90,6 +90,74 @@ Phase 1–5 收工時，有四件事是**知道但刻意沒做**的。當初每�
 
 ---
 
+## 5. GitHub Pages 發布不了（唯一還沒解決的問題）
+
+**這一項跟前四項不同：前四項是刻意不做，這一項是做了但沒成功。**
+
+### 現況
+
+線上網址 https://huangjohnny0213-gif.github.io/moneybook/ **是活的、可以裝、可以離線用**，
+但它停在 `68f6a6d` 那一版。之後每一次 push 的內容都沒有上線。
+
+線上那版缺的東西：`apple-mobile-web-app-capable` 與 `apple-mobile-web-app-title`
+（commit `deb0db7`）。所以從主畫面開啟時**可能仍會帶著網址列**，
+主畫面名稱會是被截斷的「記帳本」而不是「記帳」。
+
+### 兩種部署方式都試過，都失敗
+
+| 方式 | 現象 |
+|---|---|
+| `actions/deploy-pages`（官方推薦） | artifact 上傳成功、deployment 建得出來，但狀態永遠停在 `deployment_queued`，逾時為止都沒動過。只有最初那一次真的上線 |
+| `gh-pages` 分支 + 傳統管線 | GitHub Actions 那一關**全綠**，分支上的 commit 也正確，但 Pages 自己的 build 跑了十分鐘後回 `Page build failed.`，沒有任何細節 |
+
+兩條路都是「工單交出去了，發布的人沒做完」。九個檔案的靜態站要跑十分鐘才失敗，
+不是正常的建置時間。所以問題**不在部署方式，也不在專案設定** ——
+CI 的 lint／test／build 三關全綠，產出的 `dist` 在本機 `pnpm preview` 上驗過，
+service worker 註冊正常、九個檔案進 precache、離線可用。
+
+### 已知的一個人為因素
+
+第一次 `gh repo create --push` 當下就觸發了 workflow，而 Pages 是在那之後才用 API
+開的。第一次執行等於在跟站台初始化賽跑，很可能是這裡把這個站台弄壞的。
+**正確順序是：先建 repo → 開好 Pages → 再 push。**
+
+這解釋得了第一次，解釋不了後面每一次。
+
+### 之後從哪裡下手（照順序試）
+
+1. **重跑一次 build**（最便宜，先試）：
+   `gh api -X POST repos/huangjohnny0213-gif/moneybook/pages/builds`，
+   等兩分鐘後用 `gh api repos/.../pages/builds/latest` 看 `status`。
+   `Page build failed.` 有可能只是當天的暫時狀況。
+2. **到網頁的 Settings → Pages 手動切一次 source**（切成別的再切回 gh-pages）。
+   用網頁 UI 走的初始化流程和 API 不完全一樣，有機會把卡住的狀態重設掉。
+3. **刪掉 Pages 設定重來**：`gh api -X DELETE repos/.../pages`，
+   然後**先**在網頁上開好 Pages、確認站台已經初始化，**再** push 觸發部署。
+4. **最後手段：換一個 repo 名字重建**。如果問題是綁在這個站台上的，
+   新站台就不會繼承。注意 `vite.config.ts` 的 `base` 寫死了 `/moneybook/`，
+   換名字要跟著改，不然所有資源路徑都會 404。
+
+### 怎麼確認到底有沒有上線
+
+**不要相信 Actions 的綠燈或紅字**，它反映的是動作有沒有跑完，不是檔案有沒有換。
+唯一可靠的檢查是直接抓線上的檔案比對：
+
+```bash
+curl -s https://huangjohnny0213-gif.github.io/moneybook/ | grep -c "apple-mobile-web-app-title"
+```
+
+回 `1` 就是新版上線了，回 `0` 就是還沒。這一課是這次踩出來的：
+`actions/deploy-pages` 逾時報的是「timeout」，**不會告訴你檔案其實沒換** ——
+會讓人以為部署好了。
+
+### 在修好之前怎麼更新手機上的 App
+
+沒有辦法。線上是哪一版，手機上就是哪一版。
+本機改的東西要驗證，用 `pnpm dev --host 0.0.0.0` 讓手機連進來看
+（但那是 HTTP，裝不了 PWA，只能看版面）。
+
+---
+
 ## 動手前的提醒
 
 - 三個指令都要跑完才算完成：`pnpm test`、`pnpm lint`、`pnpm build`。
