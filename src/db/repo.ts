@@ -1,3 +1,9 @@
+import {
+  BACKUP_FORMAT,
+  BACKUP_VERSION,
+  type BackupFile,
+  type ImportPlan,
+} from '../lib/backup'
 import type { DueItem } from '../lib/recurring'
 import type { TxType } from '../types'
 import {
@@ -145,6 +151,80 @@ export async function listAllCategories(): Promise<Category[]> {
   return rows.sort((a, b) => {
     if (a.type !== b.type) return a.type === 'expense' ? -1 : 1
     return a.sortOrder - b.sortOrder
+  })
+}
+
+/** 讀出全部資料組成備份檔。 */
+export async function buildBackup(): Promise<BackupFile> {
+  const [transactions, categories, recurringRules] = await Promise.all([
+    db.transactions.toArray(),
+    db.categories.toArray(),
+    db.recurringRules.toArray(),
+  ])
+
+  return {
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
+    exportedAt: Date.now(),
+    transactions,
+    categories,
+    recurringRules,
+  }
+}
+
+/**
+ * 套用匯入計畫。
+ *
+ * 全部寫入包在同一個交易裡，中途失敗整批回滾 ——
+ * 匯入到一半的資料庫比沒匯入更糟，而且使用者不會知道缺了哪些。
+ *
+ * 刻意不寫入分類：依使用者的決定，分類樣式維持這台裝置目前的設定。
+ * 交易的 categoryId 仍然對得上，因為分類 id 是固定 slug，
+ * 每台裝置 seed 出來的都一樣。
+ */
+export async function applyImport(
+  plan: ImportPlan,
+  exportedAt: number,
+): Promise<void> {
+  await db.transaction(
+    'rw',
+    db.transactions,
+    db.recurringRules,
+    db.settings,
+    async () => {
+      if (plan.addTransactions.length > 0) {
+        await db.transactions.bulkAdd(plan.addTransactions)
+      }
+      if (plan.addRules.length > 0) {
+        await db.recurringRules.bulkAdd(plan.addRules)
+      }
+
+      // 用備份檔的時間而非現在的時間：還原一個兩個月前的舊備份時，
+      // 提醒應該要正確地立刻出現。
+      const settings = (await db.settings.get('app')) ?? DEFAULT_SETTINGS
+      await db.settings.put({
+        ...settings,
+        lastBackupAt: exportedAt,
+        txCountSinceBackup: 0,
+      })
+    },
+  )
+}
+
+/**
+ * 記下這次備份，重置提醒的計數。
+ *
+ * 讀取與寫回包在交易裡：中間若有新的一筆帳寫入，分開做會把那次的
+ * txCountSinceBackup 增量吃掉。
+ */
+export async function markBackedUp(at: number): Promise<void> {
+  await db.transaction('rw', db.settings, async () => {
+    const settings = (await db.settings.get('app')) ?? DEFAULT_SETTINGS
+    await db.settings.put({
+      ...settings,
+      lastBackupAt: at,
+      txCountSinceBackup: 0,
+    })
   })
 }
 

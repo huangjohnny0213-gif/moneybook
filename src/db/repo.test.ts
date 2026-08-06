@@ -1,11 +1,19 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import {
+  BACKUP_FORMAT,
+  BACKUP_VERSION,
+  planImport,
+} from '../lib/backup'
 import { expandDueRules } from '../lib/recurring'
 import { db, type Category } from './schema'
 import {
   addRecurringRule,
   addTransaction,
+  applyImport,
+  buildBackup,
   confirmDueItem,
+  markBackedUp,
   deleteRecurringRule,
   deleteTransaction,
   getSettings,
@@ -419,6 +427,128 @@ describe('confirmDueItem', () => {
     expect(await db.transactions.count()).toBe(3)
     const updated = await db.recurringRules.get(created.id)
     expect(expandDueRules([updated!], '2026-03-31')).toEqual([])
+  })
+})
+
+describe('備份的匯出與匯入', () => {
+  /** 造一批跨月份的帳與一條定期規則。 */
+  async function seedData() {
+    await db.categories.bulkAdd([
+      category({ id: 'food', name: '飲食' }),
+      category({ id: 'fixed', name: '固定支出', sortOrder: 2 }),
+    ])
+    await addTransaction({ ...draft, categoryId: 'food', amountMinor: 12050 })
+    await addTransaction({ ...draft, categoryId: 'food', amountMinor: 8300, date: '2026-07-15' })
+    await addTransaction({
+      ...draft,
+      categoryId: 'fixed',
+      amountMinor: 1800000,
+      type: 'income',
+    })
+    await addRecurringRule(ruleDraft)
+  }
+
+  /** 全部交易的總額，用來驗證還原後金額沒有跑掉。 */
+  async function total() {
+    const rows = await db.transactions.toArray()
+    return rows.reduce((sum, r) => sum + r.amountMinor, 0)
+  }
+
+  test('匯出包含交易、分類與定期規則', async () => {
+    await seedData()
+    const backup = await buildBackup()
+
+    expect(backup.format).toBe(BACKUP_FORMAT)
+    expect(backup.version).toBe(BACKUP_VERSION)
+    expect(backup.exportedAt).toBeGreaterThan(0)
+    expect(backup.transactions).toHaveLength(3)
+    expect(backup.categories).toHaveLength(2)
+    expect(backup.recurringRules).toHaveLength(1)
+  })
+
+  test('往返：清空後還原，筆數與總額完全一致', async () => {
+    await seedData()
+    const before = { count: await db.transactions.count(), sum: await total() }
+    const backup = await buildBackup()
+
+    // 模擬換手機：資料庫全空
+    await db.transactions.clear()
+    await db.recurringRules.clear()
+
+    const plan = planImport(backup, new Set(), new Set())
+    await applyImport(plan, backup.exportedAt)
+
+    expect(await db.transactions.count()).toBe(before.count)
+    expect(await total()).toBe(before.sum)
+    expect(await db.recurringRules.count()).toBe(1)
+  })
+
+  test('連續匯入兩次不會變兩倍', async () => {
+    await seedData()
+    const backup = await buildBackup()
+    const before = await db.transactions.count()
+
+    for (let round = 0; round < 2; round += 1) {
+      const existing = new Set((await db.transactions.toArray()).map((t) => t.id))
+      const rules = new Set((await db.recurringRules.toArray()).map((r) => r.id))
+      await applyImport(planImport(backup, existing, rules), backup.exportedAt)
+    }
+
+    expect(await db.transactions.count()).toBe(before)
+  })
+
+  test('還原的定期規則帶著鎖，不會重新補出已還原的月份', async () => {
+    // 少了 lastGeneratedMonth，新裝置會以為規則從沒跑過，
+    // 把備份裡已還原的月份再補一次待確認 —— 還原完立刻重複記帳。
+    const created = await addRecurringRule(ruleDraft)
+    await updateRecurringRule(created.id, {})
+    await db.recurringRules.update(created.id, { lastGeneratedMonth: '2026-03' })
+
+    const backup = await buildBackup()
+    await db.recurringRules.clear()
+    await applyImport(planImport(backup, new Set(), new Set()), backup.exportedAt)
+
+    const [restored] = await db.recurringRules.toArray()
+    expect(restored.lastGeneratedMonth).toBe('2026-03')
+    expect(expandDueRules([restored], '2026-03-31')).toEqual([])
+  })
+
+  test('匯入不會動到現有分類', async () => {
+    // 使用者的決定：分類樣式維持這台裝置目前的設定。
+    await db.categories.add(category({ id: 'food', name: '飲食', emoji: '🍜' }))
+    const backup = await buildBackup()
+    await db.categories.update('food', { emoji: '🍕' })
+
+    await applyImport(planImport(backup, new Set(), new Set()), backup.exportedAt)
+
+    expect((await db.categories.get('food'))?.emoji).toBe('🍕')
+  })
+
+  test('匯入後把備份檔的時間當成上次備份，計數歸零', async () => {
+    // 剛還原的資料本來就在備份檔裡，不該立刻又跳出「該備份了」。
+    await seedData()
+    const backup = await buildBackup()
+    await db.transactions.clear()
+
+    // 規則沒清掉，所以要照實把既有 id 算進來 —— 傳空集合會讓計畫過期，
+    // bulkAdd 撞上主鍵直接整批回滾（那是對的行為，但不是這個測試要測的）。
+    const rules = new Set((await db.recurringRules.toArray()).map((r) => r.id))
+    await applyImport(planImport(backup, new Set(), rules), backup.exportedAt)
+
+    const settings = await getSettings()
+    expect(settings.lastBackupAt).toBe(backup.exportedAt)
+    expect(settings.txCountSinceBackup).toBe(0)
+  })
+})
+
+describe('markBackedUp', () => {
+  test('記下時間並把未備份筆數歸零', async () => {
+    await addTransaction(draft)
+    await markBackedUp(1786000000000)
+
+    const settings = await getSettings()
+    expect(settings.lastBackupAt).toBe(1786000000000)
+    expect(settings.txCountSinceBackup).toBe(0)
   })
 })
 
