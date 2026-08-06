@@ -7,9 +7,9 @@ import { Transactions } from './screens/Transactions'
 import { seedCategoriesIfEmpty } from './db/seed'
 
 const TABS = [
-  { id: 'add', label: '記帳', Screen: AddEntry },
-  { id: 'list', label: '明細', Screen: Transactions },
-  { id: 'settings', label: '設定', Screen: Settings },
+  { id: 'add', label: '記帳' },
+  { id: 'list', label: '明細' },
+  { id: 'settings', label: '設定' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -44,14 +44,20 @@ function Shell() {
     seedCategoriesIfEmpty().then(() => setReady(true))
   }, [])
 
-  const Screen = TABS.find((item) => item.id === tab)!.Screen
-
   return (
     <>
       {/* pt 補的是瀏海／狀態列。裝成主畫面後畫面會延伸到它底下，
           不補的話最上面一排控制項會被時間與訊號格蓋住。 */}
       <div className="mx-auto flex h-[100svh] max-w-[430px] flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
-        <main className="min-h-0 flex-1">{ready && <Screen />}</main>
+        {/* 明確列出而不是查表：明細頁需要一個切到設定頁的回呼，
+            查表的寫法會逼所有畫面都接受同一組 props。 */}
+        <main className="min-h-0 flex-1">
+          {ready && tab === 'add' && <AddEntry />}
+          {ready && tab === 'list' && (
+            <Transactions onGoToBackup={() => setTab('settings')} />
+          )}
+          {ready && tab === 'settings' && <Settings />}
+        </main>
 
         <nav
           // env(safe-area-inset-bottom) 把 home indicator 的高度補回來，

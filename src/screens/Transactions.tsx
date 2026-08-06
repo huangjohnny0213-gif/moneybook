@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { BackupReminder } from '../components/BackupReminder'
 import { CategoryRank } from '../components/CategoryRank'
 import { EditSheet } from '../components/EditSheet'
 import { FilterBar } from '../components/FilterBar'
@@ -27,7 +28,7 @@ const TREND_MONTHS = 6
 const NO_FILTER: Filter = { query: '', type: 'all', categoryIds: [] }
 
 /** 明細畫面：上半是這個月的樣貌，下半是逐筆的帳。 */
-export function Transactions() {
+export function Transactions({ onGoToBackup }: { onGoToBackup: () => void }) {
   const [month, setMonth] = useState(() => monthKey(todayISO()))
   const [filter, setFilter] = useState<Filter>(NO_FILTER)
   const [editing, setEditing] = useState<Transaction | null>(null)
@@ -65,6 +66,7 @@ export function Transactions() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto">
+        <BackupReminder onGoToBackup={onGoToBackup} />
         <MonthSummary
           month={month}
           expense={sumByType(visible, 'expense')}

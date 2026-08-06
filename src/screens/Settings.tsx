@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { BackupPanel } from '../components/BackupPanel'
 import { DueList } from '../components/DueList'
 import { RecurringRules } from '../components/RecurringRules'
 import { useDueItems } from '../components/useDueItems'
@@ -29,6 +30,9 @@ export function Settings() {
   return (
     <div className="h-full overflow-y-auto">
       <DueList items={dueItems} categories={byId} />
+
+      {/* 備份排在規則設定之前：資料遺失是不可逆的，優先級高於偏好設定。 */}
+      <BackupPanel />
 
       <RecurringRules />
 
