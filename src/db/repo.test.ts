@@ -70,6 +70,23 @@ describe('addTransaction', () => {
     await addTransaction(draft)
     expect((await getSettings()).txCountSinceBackup).toBe(2)
   })
+
+  test('同一毫秒內連續新增，createdAt 仍嚴格遞增', async () => {
+    // 列表排序在同一天時靠 createdAt 決勝，平手就會退回 Dexie 的主鍵順序，
+    // 也就是隨機 UUID 的順序，列表會在每次重新整理時亂跳。
+    // 定期支出確認與備份匯入都是一次寫入多筆，這個碰撞是真的會發生的。
+    // 凍住時鐘就能穩定重現，不必靠運氣。
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 7, 6, 12, 0))
+
+    const first = await addTransaction(draft)
+    const second = await addTransaction(draft)
+    const third = await addTransaction(draft)
+
+    expect(second.createdAt).toBeGreaterThan(first.createdAt)
+    expect(third.createdAt).toBeGreaterThan(second.createdAt)
+    vi.useRealTimers()
+  })
 })
 
 describe('updateTransaction', () => {

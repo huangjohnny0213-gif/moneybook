@@ -16,6 +16,22 @@ export type TransactionDraft = Omit<
   'id' | 'createdAt' | 'updatedAt'
 >
 
+let lastTimestamp = 0
+
+/**
+ * 嚴格遞增的時間戳。同一毫秒內連續呼叫時往後推 1ms，不會回傳相同值。
+ *
+ * Date.now() 的解析度只到毫秒，而定期支出確認與備份匯入都會一次寫入多筆。
+ * 時間戳一旦相同，列表排序就會平手並退回 Dexie 的主鍵（隨機 UUID）順序，
+ * 使用者每次重新整理都會看到順序亂跳。代價是尖峰時的時間戳與壁鐘差幾毫秒，
+ * 這個 App 沒有任何地方在意這種等級的誤差。
+ */
+function nextTimestamp(): number {
+  const now = Date.now()
+  lastTimestamp = now > lastTimestamp ? now : lastTimestamp + 1
+  return lastTimestamp
+}
+
 /** 讀取設定，不存在時建立預設值。 */
 export async function getSettings(): Promise<Settings> {
   const existing = await db.settings.get('app')
@@ -28,7 +44,7 @@ export async function getSettings(): Promise<Settings> {
 export async function addTransaction(
   draft: TransactionDraft,
 ): Promise<Transaction> {
-  const now = Date.now()
+  const now = nextTimestamp()
   const tx: Transaction = {
     ...draft,
     id: crypto.randomUUID(),
@@ -53,7 +69,7 @@ export async function updateTransaction(
   id: string,
   patch: Partial<TransactionDraft>,
 ): Promise<void> {
-  await db.transactions.update(id, { ...patch, updatedAt: Date.now() })
+  await db.transactions.update(id, { ...patch, updatedAt: nextTimestamp() })
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
