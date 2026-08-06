@@ -1,0 +1,55 @@
+name: 部署到 GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # 手動觸發：改了 Pages 設定想重跑一次時不必製造一顆空 commit。
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 這個 App 沒有 staging，push 就是上線。兩次 push 疊在一起時只留最後一次，
+# 免得舊的部署後完成、把新版蓋回去。
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # 三個都跑。沒有 staging 環境，這裡是上線前唯一的關卡；
+      # 尤其 test 過了不代表編得過，型別錯誤只有 build 抓得到。
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

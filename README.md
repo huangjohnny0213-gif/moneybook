@@ -1,32 +1,32 @@
-# React + TypeScript + Vite
+# moneybook
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+自用的記帳 PWA。在 iPhone Safari 開啟後「加入主畫面」，就是一個全螢幕、
+可離線、免上架也免年費的記帳 App。
 
-Currently, two official plugins are available:
+**沒有後端、沒有登入、沒有帳號。** 所有資料只存在你自己那支手機的 IndexedDB 裡，
+不會經過任何伺服器 —— 也因此換手機或重置 Safari 資料時，只能靠手動匯出的備份檔還原。
+App 裡的備份提醒就是為了這件事存在的。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 功能
 
-## React Compiler
+- 自製數字鍵盤記帳，支出與收入
+- 月結、六個月趨勢、分類佔比排行
+- 定期支出：開 App 時列出到期項目，確認後才記入
+- 備份：JSON（可還原）與 CSV（給試算表看，不能還原）
+- 深色模式，跟隨系統或手動指定
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 開發
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+pnpm install
+pnpm dev --host 0.0.0.0   # --host 才能用手機連進來測
+pnpm test                  # vitest
+pnpm lint                  # oxlint
+pnpm build                 # tsc -b && vite build
+pnpm icons                 # 重新產生 PWA 的 icon
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+push 到 `main` 會由 GitHub Actions 跑完 lint／test／build 後自動部署到 Pages。
+
+設計決策與各階段的實作紀錄見 [docs/design.md](docs/design.md)，
+下一版可以從哪裡下手見 [docs/roadmap.md](docs/roadmap.md)。
