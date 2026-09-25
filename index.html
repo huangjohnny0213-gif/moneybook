@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/moneybook/favicon.svg" />
+    <!--
+      iOS 不完全吃 manifest 裡的 icons，加入主畫面時看的是這個標籤。
+      少了它會拿網頁截圖當 icon，主畫面上會出現一張看不懂的縮圖。
+    -->
+    <link rel="apple-touch-icon" href="/moneybook/apple-touch-icon.png" />
+    <!--
+      viewport-fit=cover 讓畫面延伸到瀏海與 home indicator 底下，
+      安全區再由 CSS 的 env(safe-area-inset-*) 補回來。沒有它底部按鈕會被蓋住。
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#fcfcfb" />
+    <!--
+      舊版 iOS 不看 manifest 的 display，靠這個標籤才會全螢幕開啟（沒有網址列）。
+      新版 iOS 已經吃 manifest 了，但留著它不會有副作用。
+    -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!--
+      主畫面上的名稱。沒有它 iOS 會拿 <title> 的「記帳本」，
+      四個字在 icon 底下會被截斷成「記帳...」。
+    -->
+    <meta name="apple-mobile-web-app-title" content="記帳" />
+    <title>記帳本</title>
+    <!--
+      在首次繪製前就決定主題。放在 <head> 而非交給 React，是因為 React 掛載完
+      至少已經過了一幀，每次開 App 都會先閃一下淺色再轉深色。
+      讀的是 localStorage 而非 IndexedDB，因為只有前者是同步的。
+    -->
+    <script>
+      (function () {
+        var pref = 'system'
+        try {
+          pref = localStorage.getItem('moneybook.theme') || 'system'
+        } catch (e) {
+          // Safari 無痕模式讀 localStorage 會丟例外，當作沒設定過。
+        }
+        var dark =
+          pref === 'dark' ||
+          (pref !== 'light' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        if (dark) {
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute('content', '#121211')
+        }
+      })()
+    </script>
+    <script type="module" crossorigin src="/moneybook/assets/index-DCnRRC0q.js"></script>
+    <link rel="stylesheet" crossorigin href="/moneybook/assets/index-D8CEzpSc.css">
+  <link rel="manifest" href="/moneybook/manifest.webmanifest"></head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
