@@ -10,6 +10,7 @@ import {
   DEFAULT_SETTINGS,
   db,
   type Category,
+  type MailImport,
   type RecurringRule,
   type Settings,
   type Transaction,
@@ -342,4 +343,152 @@ export async function updateCategoryStyle(
   style: { emoji?: string; color?: string },
 ): Promise<void> {
   await db.categories.update(id, style)
+}
+
+/** 待確認的郵件匯入，新到舊。 */
+export async function listPendingImports(): Promise<MailImport[]> {
+  const rows = await db.mailImports.where('status').equals('pending').toArray()
+  return rows.sort((a, b) =>
+    a.date !== b.date ? (a.date < b.date ? 1 : -1) : b.receivedAt - a.receivedAt,
+  )
+}
+
+/**
+ * 每個 label 上次確認時選的分類，當作下一筆的預設。
+ *
+ * 從確認過的匯入紀錄推回來，不另開一張表：那份資訊本來就在這裡，
+ * 另存一份就多一份要同步的東西。
+ */
+export async function listImportCategoryHints(): Promise<Map<string, string>> {
+  const rows = await db.mailImports.where('status').equals('confirmed').toArray()
+  const hints = new Map<string, string>()
+  // 舊的先寫、新的後寫，同一個 label 最後留下的是最近一次的選擇。
+  for (const row of rows.sort((a, b) => a.receivedAt - b.receivedAt)) {
+    if (row.categoryId) hints.set(row.label, row.categoryId)
+  }
+  return hints
+}
+
+/**
+ * 把這次同步抓到的付款存起來，回傳真正新增的筆數。
+ *
+ * 已經存在的 id 一律跳過，不論它現在是待確認、已確認還是已略過 ——
+ * 同步刻意有重疊，覆寫的話略過的付款會一直跑回來。
+ */
+export async function ingestMailImports(
+  rows: Omit<MailImport, 'status'>[],
+  syncedAt: number,
+  unreadable: string[],
+): Promise<number> {
+  return db.transaction('rw', db.mailImports, db.settings, async () => {
+    const existing = await db.mailImports.bulkGet(rows.map((row) => row.id))
+    const fresh = rows.filter((_, index) => !existing[index])
+    // 同一批裡也可能有重複的 id（同一封信出現在兩個對話串裡）。
+    const unique = [...new Map(fresh.map((row) => [row.id, row])).values()]
+
+    await db.mailImports.bulkAdd(
+      unique.map((row) => ({ ...row, status: 'pending' as const })),
+    )
+
+    const settings = (await db.settings.get('app')) ?? DEFAULT_SETTINGS
+    await db.settings.put({
+      ...settings,
+      mailSyncedAt: syncedAt,
+      mailSyncError: '',
+      mailUnreadable: unreadable,
+    })
+    return unique.length
+  })
+}
+
+/** 記下同步失敗的原因。不動 mailSyncedAt，下次從同一個時間點重抓。 */
+export async function recordMailSyncError(message: string): Promise<void> {
+  await db.transaction('rw', db.settings, async () => {
+    const settings = (await db.settings.get('app')) ?? DEFAULT_SETTINGS
+    await db.settings.put({ ...settings, mailSyncError: message })
+  })
+}
+
+/**
+ * 確認一筆匯入：寫成支出，並把匯入標成已確認。
+ *
+ * 兩件事在同一個交易裡，理由同 confirmDueItem：中間斷掉的話會留下
+ * 「帳記了但匯入還是待確認」，下次再按一次就重複記帳。
+ * 已經不是待確認的直接忽略，連點兩下確認不會記兩筆。
+ */
+export async function confirmMailImport(
+  id: string,
+  categoryId: string,
+): Promise<void> {
+  await db.transaction(
+    'rw',
+    db.mailImports,
+    db.transactions,
+    db.settings,
+    async () => {
+      const item = await db.mailImports.get(id)
+      if (!item || item.status !== 'pending') return
+
+      const now = nextTimestamp()
+      await db.transactions.add({
+        id: crypto.randomUUID(),
+        type: 'expense',
+        amountMinor: item.amountMinor,
+        date: item.date,
+        categoryId,
+        note: item.label,
+        createdAt: now,
+        updatedAt: now,
+      })
+
+      const settings = (await db.settings.get('app')) ?? DEFAULT_SETTINGS
+      await db.settings.put({
+        ...settings,
+        txCountSinceBackup: settings.txCountSinceBackup + 1,
+      })
+
+      await db.mailImports.update(id, { status: 'confirmed', categoryId })
+    },
+  )
+}
+
+/** 略過一筆匯入，例如轉帳給自己的另一個帳戶、或繳已經記過的卡費。 */
+export async function dismissMailImport(id: string): Promise<void> {
+  await db.transaction('rw', db.mailImports, async () => {
+    const item = await db.mailImports.get(id)
+    if (item?.status === 'pending') {
+      await db.mailImports.update(id, { status: 'dismissed' })
+    }
+  })
+}
+
+/**
+ * 存 Apps Script 的網址與密碼。
+ *
+ * 不重設 mailSyncedAt：重新連線時接著上次的進度抓，而不是又從七天前開始，
+ * 讓一堆已經處理過的付款重新出現。
+ */
+export async function saveMailBridge(url: string, token: string): Promise<void> {
+  await db.transaction('rw', db.settings, async () => {
+    const settings = (await db.settings.get('app')) ?? DEFAULT_SETTINGS
+    await db.settings.put({
+      ...settings,
+      mailBridgeUrl: url.trim(),
+      mailBridgeToken: token.trim(),
+      mailSyncError: '',
+    })
+  })
+}
+
+/** 中斷連線。已經抓回來的待確認付款保留，使用者仍然可以處理完。 */
+export async function clearMailBridge(): Promise<void> {
+  await db.transaction('rw', db.settings, async () => {
+    const settings = (await db.settings.get('app')) ?? DEFAULT_SETTINGS
+    await db.settings.put({
+      ...settings,
+      mailBridgeUrl: '',
+      mailBridgeToken: '',
+      mailSyncError: '',
+    })
+  })
 }
