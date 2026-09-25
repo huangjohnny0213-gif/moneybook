@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
+import type { PaymentKind } from '../lib/postalMail'
 import type { TxType } from '../types'
 
 /** 一筆帳。金額為整數分，日期為本地 'YYYY-MM-DD'。 */
@@ -42,11 +43,45 @@ export interface RecurringRule {
   lastGeneratedMonth: string
 }
 
+/**
+ * 從郵局通知信抓到、等使用者確認的一筆付款。
+ *
+ * 確認或略過之後不刪除，只改 status：同步時會刻意往回多抓兩天，
+ * 刪掉的話同一封信下次又會跑回待確認清單。
+ */
+export interface MailImport {
+  /** Gmail 的訊息 id。 */
+  id: string
+  receivedAt: number
+  kind: PaymentKind
+  amountMinor: number
+  date: string
+  label: string
+  /** 用字串而不用布林：這個欄位要建索引，IndexedDB 不接受布林鍵。 */
+  status: 'pending' | 'confirmed' | 'dismissed'
+  /** 確認時選的分類。下一筆同樣 label 的付款拿它當預設。 */
+  categoryId?: string
+}
+
 /** 全域設定，永遠只有 id 為 'app' 的單一列。 */
 export interface Settings {
   id: 'app'
   lastBackupAt: number | null
   txCountSinceBackup: number
+  /**
+   * 郵件匯入的 Apps Script 網址與密碼。沒設定時整個功能不啟動，
+   * App 照樣完全離線可用。
+   *
+   * 這幾個欄位是可選的：舊版本存下來的設定列沒有它們，不必為此寫升級程式。
+   */
+  mailBridgeUrl?: string
+  mailBridgeToken?: string
+  /** 上次同步成功時 Apps Script 那端的時間。用對方的時鐘，手機時間不準也不會漏信。 */
+  mailSyncedAt?: number
+  /** 上次同步失敗的原因，成功後清空。 */
+  mailSyncError?: string
+  /** 上次同步時看不懂的信的主旨，給除錯用。 */
+  mailUnreadable?: string[]
 }
 
 export class MoneybookDB extends Dexie {
@@ -54,6 +89,7 @@ export class MoneybookDB extends Dexie {
   categories!: EntityTable<Category, 'id'>
   recurringRules!: EntityTable<RecurringRule, 'id'>
   settings!: EntityTable<Settings, 'id'>
+  mailImports!: EntityTable<MailImport, 'id'>
 
   constructor(name = 'moneybook') {
     super(name)
@@ -64,6 +100,10 @@ export class MoneybookDB extends Dexie {
       categories: 'id, type, sortOrder',
       recurringRules: 'id',
       settings: 'id',
+    })
+    // 只列新增的表，其餘沿用上一版。Dexie 升級時既有的資料原封不動。
+    this.version(2).stores({
+      mailImports: 'id, status',
     })
   }
 }
