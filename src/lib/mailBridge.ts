@@ -72,6 +72,18 @@ export function bridgeRequestUrl(
   return url.toString()
 }
 
+/**
+ * 這個 HTTP 狀態值不值得隔幾秒再試一次。
+ *
+ * Apps Script 的回應要經 script.googleusercontent.com 轉一手，那一站會隨機回 404
+ * 或整個卡住，同一個網址過幾秒再打就好了（2026-09 實測連打十次只成功四次）。
+ * 網址真的貼錯時 Google 回的 404 不帶 CORS 標頭，瀏覽器根本讀不到狀態碼、
+ * 只會丟 TypeError，所以 App 讀得到的 404 幾乎都是那種暫時性的。
+ */
+export function isTransientStatus(status: number): boolean {
+  return status === 404 || status === 408 || status === 429 || status >= 500
+}
+
 /** 解析 Apps Script 的回應。錯誤訊息寫成可以直接顯示給使用者的句子。 */
 export function parseBridgeResponse(text: string): BridgeResponse {
   let raw: unknown

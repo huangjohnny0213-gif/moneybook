@@ -211,6 +211,20 @@ describe('syncMailImports', () => {
     return { impl, calls }
   }
 
+  /** 依序回傳每一個回應；用完之後一直回最後一個。 */
+  function fetchSequence(...responses: [body: unknown, status: number][]) {
+    const calls: string[] = []
+    const impl = (async (input: RequestInfo | URL) => {
+      calls.push(String(input))
+      const [body, status] = responses[Math.min(calls.length, responses.length) - 1]
+      return new Response(JSON.stringify(body), { status })
+    }) as typeof fetch
+    return { impl, calls }
+  }
+
+  // 重試之間不必真的等：碰 IndexedDB 的測試不能用 fake timers 快轉。
+  const NO_WAIT = { retryDelayMs: 0 }
+
   test('沒設定網址時不發請求', async () => {
     const { impl, calls } = fakeFetch({})
     expect(await syncMailImports({ fetchImpl: impl, now: NOW })).toEqual({
@@ -266,7 +280,7 @@ describe('syncMailImports', () => {
       throw new TypeError('Load failed')
     }) as typeof fetch
 
-    const result = await syncMailImports({ fetchImpl: impl, now: NOW })
+    const result = await syncMailImports({ fetchImpl: impl, now: NOW, ...NO_WAIT })
     expect(result.status).toBe('error')
 
     const settings = await getSettings()
@@ -284,7 +298,60 @@ describe('syncMailImports', () => {
   test('HTTP 錯誤', async () => {
     await saveMailBridge(EXEC_URL, 'secret')
     const { impl } = fakeFetch({}, 500)
-    await syncMailImports({ fetchImpl: impl, now: NOW })
+    await syncMailImports({ fetchImpl: impl, now: NOW, ...NO_WAIT })
     expect((await getSettings()).mailSyncError).toMatch(/500/)
+  })
+
+  test('Google 那端偶發的 404 自動重試，成功就照常入帳', async () => {
+    await saveMailBridge(EXEC_URL, 'secret')
+    const { impl, calls } = fetchSequence(
+      [{}, 404],
+      [{ ok: true, now: NOW, mails: [walletMail] }, 200],
+    )
+
+    const result = await syncMailImports({ fetchImpl: impl, now: NOW, ...NO_WAIT })
+    expect(result).toEqual({ status: 'ok', added: 1, unreadable: 0 })
+    expect(calls).toHaveLength(2)
+    expect((await getSettings()).mailSyncError).toBeFalsy()
+  })
+
+  test('一直失敗時最多試三次，訊息說明是暫時的', async () => {
+    await saveMailBridge(EXEC_URL, 'secret')
+    const { impl, calls } = fakeFetch({}, 404)
+
+    const result = await syncMailImports({ fetchImpl: impl, now: NOW, ...NO_WAIT })
+    expect(result.status).toBe('error')
+    expect(calls).toHaveLength(3)
+    const message = (await getSettings()).mailSyncError
+    expect(message).toMatch(/404/)
+    expect(message).toMatch(/暫時/)
+  })
+
+  test('權限類的 HTTP 錯誤不重試', async () => {
+    await saveMailBridge(EXEC_URL, 'secret')
+    const { impl, calls } = fakeFetch({}, 403)
+    await syncMailImports({ fetchImpl: impl, now: NOW, ...NO_WAIT })
+    expect(calls).toHaveLength(1)
+    expect((await getSettings()).mailSyncError).toMatch(/403/)
+  })
+
+  test('密碼錯誤不重試：再試幾次答案都一樣', async () => {
+    await saveMailBridge(EXEC_URL, 'wrong')
+    const { impl, calls } = fakeFetch({ ok: false, error: 'unauthorized' })
+    await syncMailImports({ fetchImpl: impl, now: NOW, ...NO_WAIT })
+    expect(calls).toHaveLength(1)
+  })
+
+  test('卡住逾時也重試，全部逾時時說太久沒回應', async () => {
+    await saveMailBridge(EXEC_URL, 'secret')
+    let calls = 0
+    const impl = (async () => {
+      calls++
+      throw new DOMException('The operation timed out.', 'TimeoutError')
+    }) as typeof fetch
+
+    await syncMailImports({ fetchImpl: impl, now: NOW, ...NO_WAIT })
+    expect(calls).toBe(3)
+    expect((await getSettings()).mailSyncError).toMatch(/太久沒回應/)
   })
 })

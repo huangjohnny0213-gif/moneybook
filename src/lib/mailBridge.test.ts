@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import {
   bridgeRequestUrl,
   checkBridgeUrl,
+  isTransientStatus,
   parseBridgeResponse,
   syncSince,
 } from './mailBridge'
@@ -96,5 +97,19 @@ describe('parseBridgeResponse', () => {
       /格式不對/,
     )
     expect(() => parseBridgeResponse('[]')).toThrow(/格式不對/)
+  })
+})
+
+describe('isTransientStatus', () => {
+  test('Google 轉手那一站偶發的 404 與伺服器錯誤值得再試', () => {
+    for (const status of [404, 408, 429, 500, 502, 503]) {
+      expect(isTransientStatus(status)).toBe(true)
+    }
+  })
+
+  test('權限類的錯誤再試也一樣，不重試', () => {
+    for (const status of [400, 401, 403]) {
+      expect(isTransientStatus(status)).toBe(false)
+    }
   })
 })
