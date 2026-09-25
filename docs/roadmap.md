@@ -165,6 +165,23 @@ curl -s https://huangjohnny0213-gif.github.io/moneybook/ | grep -c "apple-mobile
 
 ---
 
+## 6. 郵局通知匯入（已完成）
+
+**已做**：見 [mail-import.md](mail-import.md) 與 `design.md` 的第 8 點。
+
+**還沒做、可以接著做的**：
+
+- **Taiwan Pay 在店家消費的信**：寫這個功能時使用者的信箱裡只看到 Taiwan Pay 掃碼**轉帳**
+  （行動郵局交易通知），沒看到在店家消費的通知。如果之後出現新的主旨，設定頁會在
+  「看不懂的信」列出來，照 `postalMail.test.ts` 的格式捏一封假信、補一個解析分支即可。
+  主旨若不含「扣款通知／交易通知／繳費通知」，`Code.gs` 的 `SUBJECT_KEYWORDS` 也要加，
+  而那需要使用者重新部署。
+- **收入**：目前只抓扣款。郵局若有入帳通知信，可以同樣進待確認，類型設成收入。
+- **匯入紀錄沒有進備份**：換手機後第一次同步會把最近七天確認過的付款再列一次，
+  要手動略過。若覺得煩，可以在交易上記 Gmail 訊息 id 並進備份（`BACKUP_VERSION` 要進版）。
+
+---
+
 ## 動手前的提醒
 
 - 三個指令都要跑完才算完成：`pnpm test`、`pnpm lint`、`pnpm build`。

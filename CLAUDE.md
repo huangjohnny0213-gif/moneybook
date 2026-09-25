@@ -3,6 +3,9 @@
 iPhone 自用的記帳 PWA。純本機 IndexedDB，無後端、無登入、無帳號，
 靠手動匯出備份。完整設計與實作階段見 [docs/design.md](docs/design.md)。
 
+唯一會連網路的是選配的郵局通知匯入：App 去問使用者自己 Google 帳號裡的
+Apps Script（`apps-script/Code.gs`），設定方式見 [docs/mail-import.md](docs/mail-import.md)。
+
 ## 指令
 
 開發機是 Windows 11 + WSL Ubuntu，專案在 WSL 的 `~/moneybook`。
@@ -67,6 +70,19 @@ IndexedDB 不接受布林值當索引鍵，寫進去不報錯但查不到。這�
 
 **分類只開放改 emoji 與顏色，不開放改名稱。** 歷史交易只存 `categoryId`，
 把「飲食」改成「房租」會讓過去半年的午餐全部變成房租。
+
+**郵件匯入永遠是選配。** 沒設定、沒網路、Apps Script 壞掉時，App 其餘部分必須照常運作。
+同步失敗只記進 `settings.mailSyncError` 讓設定頁顯示，不擋任何畫面。
+
+**匯入的付款不可以自動入帳。** 一律進待確認清單，使用者選分類後才寫成交易。
+LINE Pay 的郵局通知信沒有店名，猜錯分類比沒記更難查。
+
+**信件解析放在 `src/lib/postalMail.ts`，不放 Apps Script。** `Code.gs` 只找信、原封不動交出去。
+Apps Script 部署在使用者的 Google 帳號裡，改一次要他自己重新部署。
+
+**Apps Script 的網址與密碼不進備份檔。** 那是讀信箱的鑰匙，不該跟著備份檔到處走。
+
+**測試裡的信件內容一律捏造。** 這個 repo 是公開的，帳號、交易編號、附言都不能用真的。
 
 ## iOS / PWA
 
