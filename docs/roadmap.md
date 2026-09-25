@@ -97,7 +97,33 @@ Phase 1–5 收工時，有四件事是**知道但刻意沒做**的。當初每�
 
 ---
 
-## 5. GitHub Pages 發布不了（唯一還沒解決的問題）
+## 5. GitHub Pages 發布不了（2026-09-25 已恢復）
+
+### 怎麼恢復的
+
+照下面「之後從哪裡下手」的第 2 步，在 Settings → Pages 把 source 切走再切回 `gh-pages`，
+然後重跑一次「部署到 GitHub Pages」workflow（workflow_dispatch）。這次 Pages 的建置
+22 秒就完成，deployment 狀態是 `success`。八月那兩次為什麼卡住仍然不知道，
+最可能的解釋還是下面寫的「站台初始化被搶跑」，切一次 source 等於讓它重新初始化。
+
+**切 source 時要切成 `None`，不要切成 `main`。** 這次中間切到了 `main`：
+
+| 部署 | 建立時間 | 結果 |
+|---|---|---|
+| `gh-pages`（正確的） | 08:39:42 | 卡在 `purging_cdn` 十分鐘後逾時失敗 |
+| `main`（原始碼） | 08:39:43 | 7 秒成功 |
+
+晚一秒的 `main` 部署把正確的那個蓋掉了。`main` 上是 Vite 的原始碼，`index.html` 指向
+`/src/main.tsx`，所以線上變成一片白，直到重跑 workflow 才修好。已經裝在手機上的 App
+因為 service worker 有快取，這段時間照樣能開；IndexedDB 裡的帳不受部署影響。
+
+**從 Claude Code 的雲端環境查部署狀態**：那裡連不到 `github.io`，下面那個 curl 檢查做不了。
+改查 `api.github.com/repos/…/deployments?environment=github-pages` 與各 deployment 的
+`/statuses`，最新一筆是 `gh-pages` 且狀態 `success` 才算數。
+
+以下保留當初的紀錄。
+
+### 原本的紀錄
 
 **這一項跟前四項不同：前四項是刻意不做，這一項是做了但沒成功。**
 
