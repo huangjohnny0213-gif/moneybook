@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ThemeProvider } from './components/ThemeProvider'
 import { useDueItems } from './components/useDueItems'
+import { useMailSync } from './components/useMailSync'
+import { usePendingImports } from './components/usePendingImports'
 import { UpdatePrompt } from './components/UpdatePrompt'
 import { AddEntry } from './screens/AddEntry'
 import { Settings } from './screens/Settings'
@@ -38,12 +40,16 @@ export default function App() {
 function Shell() {
   const [tab, setTab] = useState<TabId>('add')
   const [ready, setReady] = useState(false)
-  const dueCount = useDueItems().length
+  // 定期支出與郵局通知共用同一個紅點：兩者要做的事一樣，都是到設定頁確認。
+  const dueCount = useDueItems().length + usePendingImports().length
 
   useEffect(() => {
     // 每次開 App 都呼叫，但只在資料庫還沒有分類時才真的寫入。
     seedCategoriesIfEmpty().then(() => setReady(true))
   }, [])
+
+  // 等分類 seed 完再同步，確認付款時才有分類可選。
+  useMailSync(ready)
 
   return (
     <>
@@ -83,7 +89,7 @@ function Shell() {
                 // 紅點靠 aria-label 補上語意，否則螢幕閱讀器只會唸到「設定」，
                 // 完全不知道有東西待處理。
                 <span
-                  aria-label={`有 ${dueCount} 筆定期支出待確認`}
+                  aria-label={`有 ${dueCount} 筆待確認`}
                   role="status"
                   className="absolute top-2 ml-1 h-2 w-2 rounded-full bg-[#d03b3b]"
                 />
