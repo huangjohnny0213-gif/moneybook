@@ -91,6 +91,20 @@ iOS Safari 對 `<a download>` 支援很差，常直接開新分頁顯示 JSON �
 - `overscroll-behavior: none` 消除橡皮筋效果。
 - Service worker 更新後顯示「有新版本，點此重新載入」，否則會一直用舊快取。
 
+### 8. 郵局通知匯入是選配，而且只產生待確認
+
+Phase 1–5 之後加上的功能，詳見 [mail-import.md](mail-import.md)。
+
+- 這是全 App **唯一會連網路**的地方：App 打開時去問使用者自己 Google 帳號裡的
+  Apps Script，拿郵局的扣款通知信。沒設定、沒網路、Apps Script 壞掉，其餘功能都不受影響。
+- **信件解析在 App（`lib/postalMail.ts`），不在 Apps Script。** Apps Script 部署在使用者
+  帳號裡，改一次要他自己重新部署；App 更新只要 push。
+- **不自動入帳。** LINE Pay 的信沒有店名，分類只有使用者知道。抓到的付款進 `mailImports`
+  表當待確認，選了分類才寫成交易。
+- **去重靠 Gmail 訊息 id，匯入紀錄確認或略過後不刪。** 每次同步刻意比上次多往回抓兩天
+  （信會晚到），刪掉的話略過的付款會一直跑回來。
+- 網址與密碼存在 `settings`，**不進備份檔**。
+
 ---
 
 ## 資料模型（`src/db/schema.ts`）
@@ -204,6 +218,12 @@ Dexie 索引：`transactions: 'id, date, categoryId, type, [date+type]'`。
 **Phase 5 — PWA 與部署**
 manifest、icons、safe-area、16px 輸入、service worker 更新提示、GitHub Actions 部署到 Pages。
 驗收：iPhone Safari 開啟網址 → 加入主畫面 → 開啟後無網址列 → **開飛航模式仍能記帳**。
+
+**Phase 6 — 郵局通知匯入**
+`postalMail.ts`、`mailBridge.ts`（含測試）、Dexie version 2 的 `mailImports` 表、
+`apps-script/Code.gs`、設定頁的連線設定與待確認清單、開 App 與切回前景時同步。
+驗收：用捏造的信測過三種格式；同一封信同步兩次只出現一次；略過的不會回來；
+同一個 label 第二筆預選上次的分類。
 
 ---
 
