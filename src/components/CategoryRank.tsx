@@ -3,10 +3,12 @@ import { categoryGlyph } from '../lib/glyph'
 import { formatAmount } from '../lib/money'
 import type { CategorySlice } from '../lib/stats'
 import type { Category } from '../db/schema'
+import type { TxType } from '../types'
 
 interface Props {
   slices: CategorySlice[]
   categories: Map<string, Category>
+  type: TxType
 }
 
 /**
@@ -18,18 +20,30 @@ interface Props {
  * 條長按**最大值**等比例而非按 100%。房租佔 88% 時，按 100% 會讓其餘五類的條
  * 全部短到看不出差別，而那五類之間誰多誰少正是使用者想知道的。
  *
- * 只排支出：這個 App 的目的是事後分析錢花到哪，收入只有兩類、排行沒有資訊量，
- * 收入總額在上方的合計已經看得到。
+ * 預設排支出：這個 App 的目的是事後分析錢花到哪。收入要在上方合計點「收入」
+ * 才會切過來，它通常只有薪水一類，常駐顯示只是一根佔滿的長條。
  */
-export function CategoryRank({ slices, categories }: Props) {
+export function CategoryRank({ slices, categories, type }: Props) {
   const { seriesColor } = useTheme()
-  if (slices.length === 0) return null
+  const title = type === 'expense' ? '支出佔比' : '收入佔比'
+
+  if (slices.length === 0) {
+    // 支出是預設畫面，沒帳時下方清單已經有提示，這裡再講一次是噪音。
+    // 收入是使用者主動點過來的，什麼都不畫會像是按了沒反應。
+    if (type === 'expense') return null
+    return (
+      <section className="border-b border-hairline px-4 py-3">
+        <h2 className="text-xs text-ink-3">{title}</h2>
+        <p className="mt-2 text-sm text-ink-3">沒有收入的帳</p>
+      </section>
+    )
+  }
 
   const max = slices[0].amountMinor
 
   return (
     <section className="border-b border-hairline px-4 py-3">
-      <h2 className="mb-2 text-xs text-ink-3">支出佔比</h2>
+      <h2 className="mb-2 text-xs text-ink-3">{title}</h2>
       <ul className="flex flex-col gap-2.5">
         {slices.map((slice) => {
           const category = categories.get(slice.categoryId)

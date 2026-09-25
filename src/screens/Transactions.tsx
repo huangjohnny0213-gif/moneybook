@@ -23,6 +23,7 @@ import {
   listTransactionsByMonth,
 } from '../db/repo'
 import type { Category, Transaction } from '../db/schema'
+import type { TxType } from '../types'
 
 const TREND_MONTHS = 6
 const NO_FILTER: Filter = { query: '', type: 'all', categoryIds: [] }
@@ -32,6 +33,7 @@ export function Transactions({ onGoToBackup }: { onGoToBackup: () => void }) {
   const [month, setMonth] = useState(() => monthKey(todayISO()))
   const [filter, setFilter] = useState<Filter>(NO_FILTER)
   const [editing, setEditing] = useState<Transaction | null>(null)
+  const [breakdownType, setBreakdownType] = useState<TxType>('expense')
 
   const monthRows = useLiveQuery(
     () => listTransactionsByMonth(month),
@@ -56,7 +58,7 @@ export function Transactions({ onGoToBackup }: { onGoToBackup: () => void }) {
   // 兩張圖與合計都跟著篩選走。篩了「飲食」之後趨勢圖還畫全部，
   // 上下兩塊數字對不起來，使用者無從判斷哪個才是真的。
   const visible = filterTransactions(monthRows, categories, filter)
-  const slices = categoryBreakdown(visible, 'expense')
+  const slices = categoryBreakdown(visible, breakdownType)
   const trend = monthlyTotals(
     filterTransactions(trendRows, categories, filter),
     months,
@@ -72,10 +74,12 @@ export function Transactions({ onGoToBackup }: { onGoToBackup: () => void }) {
           expense={sumByType(visible, 'expense')}
           income={sumByType(visible, 'income')}
           filtered={isFiltered}
+          breakdownType={breakdownType}
           onMonthChange={setMonth}
+          onBreakdownTypeChange={setBreakdownType}
         />
         <TrendChart totals={trend} selected={month} onSelect={setMonth} />
-        <CategoryRank slices={slices} categories={byId} />
+        <CategoryRank slices={slices} categories={byId} type={breakdownType} />
         <FilterBar
           filter={filter}
           categories={categories.filter((c) => !c.archived)}
@@ -154,8 +158,15 @@ function Row({
         {category ? categoryGlyph(category) : '?'}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm text-ink">
+        <span className="flex items-center gap-1.5 text-sm text-ink">
           {category?.name ?? '未知分類'}
+          {row.recurringId && (
+            // 只用細框與淡色字，不上色：顏色在這個 App 裡只屬於分類，
+            // 多一種有色標記會讓人以為它也是一個分類。
+            <span className="rounded border border-hairline px-1 text-[10px] leading-4 text-ink-3">
+              定期
+            </span>
+          )}
         </span>
         {row.note && (
           <span className="block truncate text-xs text-ink-3">{row.note}</span>
