@@ -72,6 +72,9 @@ describe('categoryBreakdown', () => {
     expect(categoryBreakdown(rows, 'expense').map((s) => s.categoryId)).toEqual([
       'food',
     ])
+    expect(categoryBreakdown(rows, 'income')).toEqual([
+      { categoryId: 'salary', amountMinor: 900, sharePercent: 100 },
+    ])
   })
 
   test('金額相同時以 categoryId 決定順序', () => {
